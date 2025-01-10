@@ -7813,7 +7813,20 @@ interface LocatorAssertions {
    * @param options
    */
   toBeChecked(options?: {
+    /**
+     * Provides state to assert for. Asserts for input to be checked by default. This option can't be used when
+     * [`indeterminate`](https://playwright.dev/docs/api/class-locatorassertions#locator-assertions-to-be-checked-option-indeterminate)
+     * is set to true.
+     */
     checked?: boolean;
+
+    /**
+     * Asserts that the element is in the indeterminate (mixed) state. Only supported for checkboxes and radio buttons.
+     * This option can't be true when
+     * [`checked`](https://playwright.dev/docs/api/class-locatorassertions#locator-assertions-to-be-checked-option-checked)
+     * is provided.
+     */
+    indeterminate?: boolean;
 
     /**
      * Time to retry the assertion for in milliseconds. Defaults to `timeout` in `TestConfig.expect`.
@@ -9656,6 +9669,18 @@ interface TestConfigWebServer {
    * How long to wait for the process to start up and be available in milliseconds. Defaults to 60000.
    */
   timeout?: number;
+
+  /**
+   * How to shut down the process. If unspecified, the process group is forcefully `SIGKILL`ed. If set to `{ signal:
+   * 'SIGINT', timeout: 500 }`, the process group is sent a `SIGINT` signal, followed by `SIGKILL` if it doesn't exit
+   * within 500ms. You can also use `SIGTERM` instead. A `0` timeout means no `SIGKILL` will be sent. Windows doesn't
+   * support `SIGINT` and `SIGTERM` signals, so this option is ignored.
+   */
+  gracefulShutdown?: {
+    signal: "SIGINT"|"SIGTERM";
+
+    timeout: number;
+  };
 
   /**
    * The url on your http server that is expected to return a 2xx, 3xx, 400, 401, 402, or 403 status code when the
