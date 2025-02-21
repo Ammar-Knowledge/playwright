@@ -509,6 +509,32 @@ it('should escape yaml text in text nodes', async ({ page }) => {
   `);
 });
 
+it('should normalize whitespace', async ({ page }) => {
+  await page.setContent(`
+    <details>
+      <summary> one  \n two <a href="#"> link &nbsp;\n  1 </a> </summary>
+    </details>
+    <input value='  hello   &nbsp; world '>
+  `);
+
+  await checkAndMatchSnapshot(page.locator('body'), `
+    - group:
+      - text: one two
+      - link "link 1"
+    - textbox: hello world
+  `);
+
+  // Weird whitespace in the template should be normalized.
+  await expect(page.locator('body')).toMatchAriaSnapshot(`
+    - group:
+      - text: |
+          one
+          two
+      - link "  link     1 "
+    - textbox:        hello  world
+  `);
+});
+
 it('should handle long strings', async ({ page }) => {
   const s = 'a'.repeat(10000);
   await page.setContent(`
@@ -555,6 +581,7 @@ it('should escape special yaml values', async ({ page }) => {
     <a href="#">null</a>NULL
     <a href="#">123</a>123
     <a href="#">-1.2</a>-1.2
+    <a href="#">-</a>-
     <input type=text value="555">
   `);
 
@@ -573,6 +600,21 @@ it('should escape special yaml values', async ({ page }) => {
     - text: "123"
     - link "-1.2"
     - text: "-1.2"
+    - link "-"
+    - text: "-"
     - textbox: "555"
+  `);
+});
+
+it('should not report textarea textContent', async ({ page }) => {
+  await page.setContent(`<textarea>Before</textarea>`);
+  await checkAndMatchSnapshot(page.locator('body'), `
+    - textbox: Before
+  `);
+  await page.evaluate(() => {
+    document.querySelector('textarea').value = 'After';
+  });
+  await checkAndMatchSnapshot(page.locator('body'), `
+    - textbox: After
   `);
 });

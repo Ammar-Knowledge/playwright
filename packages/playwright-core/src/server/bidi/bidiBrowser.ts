@@ -14,22 +14,24 @@
  * limitations under the License.
  */
 
-import type * as channels from '@protocol/channels';
-import type { RegisteredListener } from '../../utils/eventsHelper';
-import { eventsHelper } from '../../utils/eventsHelper';
-import type { BrowserOptions } from '../browser';
+import { eventsHelper } from '../utils/eventsHelper';
 import { Browser } from '../browser';
-import { assertBrowserContextIsNotOwned, BrowserContext } from '../browserContext';
-import type { SdkObject } from '../instrumentation';
+import { BrowserContext, assertBrowserContextIsNotOwned } from '../browserContext';
 import * as network from '../network';
-import type { InitScript, Page } from '../page';
-import type { ConnectionTransport } from '../transport';
-import type * as types from '../types';
-import type { BidiSession } from './bidiConnection';
 import { BidiConnection } from './bidiConnection';
 import { bidiBytesValueToString } from './bidiNetworkManager';
 import { BidiPage } from './bidiPage';
 import * as bidi from './third_party/bidiProtocol';
+
+import type { RegisteredListener } from '../utils/eventsHelper';
+import type { BrowserOptions } from '../browser';
+import type { SdkObject } from '../instrumentation';
+import type { InitScript, Page } from '../page';
+import type { ConnectionTransport } from '../transport';
+import type * as types from '../types';
+import type { BidiSession } from './bidiConnection';
+import type * as channels from '@protocol/channels';
+
 
 export class BidiBrowser extends Browser {
   private readonly _connection: BidiConnection;
@@ -152,6 +154,9 @@ export class BidiBrowser extends Browser {
           continue;
         page._session.addFrameBrowsingContext(event.context);
         page._page._frameManager.frameAttached(event.context, parentFrameId);
+        const frame = page._page._frameManager.frame(event.context);
+        if (frame)
+          frame._url = event.url;
         return;
       }
       return;
@@ -164,6 +169,7 @@ export class BidiBrowser extends Browser {
     const session = this._connection.createMainFrameBrowsingContextSession(event.context);
     const opener = event.originalOpener && this._bidiPages.get(event.originalOpener);
     const page = new BidiPage(context, session, opener || null);
+    page._page.mainFrame()._url = event.url;
     this._bidiPages.set(event.context, page);
   }
 

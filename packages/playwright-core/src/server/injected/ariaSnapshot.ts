@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-import * as roleUtils from './roleUtils';
+import { escapeRegExp, longestCommonSubstring, normalizeWhiteSpace } from '@isomorphic/stringUtils';
+
 import { getElementComputedStyle } from './domUtils';
-import { escapeRegExp, longestCommonSubstring } from '@isomorphic/stringUtils';
+import * as roleUtils from './roleUtils';
 import { yamlEscapeKeyIfNeeded, yamlEscapeValueIfNeeded } from './yaml';
-import type { AriaProps, AriaRole, AriaTemplateNode, AriaTemplateRoleNode, AriaTemplateTextNode } from '@isomorphic/ariaSnapshot';
+
+import type { AriaProps, AriaRegex, AriaRole, AriaTemplateNode, AriaTemplateRoleNode, AriaTemplateTextNode } from '@isomorphic/ariaSnapshot';
 
 export type AriaNode = AriaProps & {
   role: AriaRole | 'fragment';
@@ -57,7 +59,8 @@ export function generateAriaTree(rootElement: Element): AriaSnapshot {
 
     if (node.nodeType === Node.TEXT_NODE && node.nodeValue) {
       const text = node.nodeValue;
-      if (text)
+      // <textarea>AAA</textarea> should not report AAA as a child of the textarea.
+      if (ariaNode.role !== 'textbox' && text)
         ariaNode.children.push(node.nodeValue || '');
       return;
     }
@@ -137,7 +140,7 @@ function toAriaNode(element: Element): AriaNode | null {
   if (!role || role === 'presentation' || role === 'none')
     return null;
 
-  const name = roleUtils.getElementAccessibleName(element, false) || '';
+  const name = normalizeWhiteSpace(roleUtils.getElementAccessibleName(element, false) || '');
   const result: AriaNode = { role, name, children: [], element };
 
   if (roleUtils.kAriaCheckedRoles.includes(role))
@@ -170,7 +173,7 @@ function normalizeStringChildren(rootA11yNode: AriaNode) {
   const flushChildren = (buffer: string[], normalizedChildren: (AriaNode | string)[]) => {
     if (!buffer.length)
       return;
-    const text = normalizeWhitespaceWithin(buffer.join('')).trim();
+    const text = normalizeWhiteSpace(buffer.join(''));
     if (text)
       normalizedChildren.push(text);
     buffer.length = 0;
@@ -196,16 +199,14 @@ function normalizeStringChildren(rootA11yNode: AriaNode) {
   visit(rootA11yNode);
 }
 
-const normalizeWhitespaceWithin = (text: string) => text.replace(/[\u200b\s\t\r\n]+/g, ' ');
-
-function matchesText(text: string, template: RegExp | string | undefined): boolean {
+function matchesText(text: string, template: AriaRegex | string | undefined): boolean {
   if (!template)
     return true;
   if (!text)
     return false;
   if (typeof template === 'string')
     return text === template;
-  return !!text.match(template);
+  return !!text.match(new RegExp(template.pattern));
 }
 
 function matchesTextNode(text: string, template: AriaTemplateTextNode) {
@@ -243,7 +244,7 @@ function matchesNode(node: AriaNode | string, template: AriaTemplateNode, depth:
   if (typeof node === 'string' && template.kind === 'text')
     return matchesTextNode(node, template);
 
-  if (typeof node === 'object' && template.kind === 'role') {
+  if (node !== null && typeof node === 'object' && template.kind === 'role') {
     if (template.role !== 'fragment' && template.role !== node.role)
       return false;
     if (template.checked !== undefined && template.checked !== node.checked)
@@ -287,20 +288,22 @@ function containsList(children: (AriaNode | string)[], template: AriaTemplateNod
 
 function matchesNodeDeep(root: AriaNode, template: AriaTemplateNode, collectAll: boolean): AriaNode[] {
   const results: AriaNode[] = [];
-  const visit = (node: AriaNode | string): boolean => {
+  const visit = (node: AriaNode | string, parent: AriaNode | null): boolean => {
     if (matchesNode(node, template, 0)) {
-      results.push(node as AriaNode);
+      const result = typeof node === 'string' ? parent : node;
+      if (result)
+        results.push(result);
       return !collectAll;
     }
     if (typeof node === 'string')
       return false;
     for (const child of node.children || []) {
-      if (visit(child))
+      if (visit(child, node))
         return true;
     }
     return false;
   };
-  visit(root);
+  visit(root, null);
   return results;
 }
 

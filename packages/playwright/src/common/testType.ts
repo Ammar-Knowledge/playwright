@@ -14,15 +14,19 @@
  * limitations under the License.
  */
 
-import { expect } from '../matchers/expect';
-import { currentlyLoadingFileSuite, currentTestInfo, setCurrentlyLoadingFileSuite } from './globals';
-import { TestCase, Suite } from './test';
-import { wrapFunctionWithLocation } from '../transform/transform';
-import type { FixturesWithLocation } from './config';
-import type { Fixtures, TestType, TestDetails } from '../../types/test';
-import type { Location } from '../../types/testReporter';
-import { getPackageManagerExecCommand, monotonicTime, raceAgainstDeadline, zones } from 'playwright-core/lib/utils';
 import { errors } from 'playwright-core';
+import { getPackageManagerExecCommand, monotonicTime, raceAgainstDeadline, currentZone } from 'playwright-core/lib/utils';
+
+import { currentTestInfo, currentlyLoadingFileSuite, setCurrentlyLoadingFileSuite } from './globals';
+import { Suite, TestCase } from './test';
+import { expect } from '../matchers/expect';
+import { wrapFunctionWithLocation } from '../transform/transform';
+
+import type { FixturesWithLocation } from './config';
+import type { Fixtures, TestDetails, TestStepInfo, TestType } from '../../types/test';
+import type { Location } from '../../types/testReporter';
+import type { TestInfoImpl } from '../worker/testInfo';
+
 
 const testTypeSymbol = Symbol('testType');
 
@@ -57,8 +61,7 @@ export class TestTypeImpl {
     test.slow = wrapFunctionWithLocation(this._modifier.bind(this, 'slow'));
     test.setTimeout = wrapFunctionWithLocation(this._setTimeout.bind(this));
     test.step = this._step.bind(this, 'pass');
-    test.step.fail = this._step.bind(this, 'fail');
-    test.step.fixme = this._step.bind(this, 'fixme');
+    test.step.skip = this._step.bind(this, 'skip');
     test.use = wrapFunctionWithLocation(this._use.bind(this));
     test.extend = wrapFunctionWithLocation(this._extend.bind(this));
     test.info = () => {
@@ -259,40 +262,37 @@ export class TestTypeImpl {
     suite._use.push({ fixtures, location });
   }
 
-  async _step<T>(expectation: 'pass'|'fail'|'fixme', title: string, body: () => T | Promise<T>, options: {box?: boolean, location?: Location, timeout?: number } = {}): Promise<T> {
+  _step<T>(expectation: 'pass'|'skip', title: string, body: (step: TestStepInfo) => T | Promise<T>, options: {box?: boolean, location?: Location, timeout?: number } = {}): Promise<T> {
     const testInfo = currentTestInfo();
     if (!testInfo)
       throw new Error(`test.step() can only be called from a test`);
-    if (expectation === 'fixme')
-      return undefined as T;
+    return testInfo._floatingPromiseScope.wrapPromiseAPIResult(this._stepInternal(expectation, testInfo, title, body, options));
+  }
+
+  private async _stepInternal<T>(expectation: 'pass'|'skip', testInfo: TestInfoImpl, title: string, body: (step: TestStepInfo) => T | Promise<T>, options: {box?: boolean, location?: Location, timeout?: number } = {}): Promise<T> {
     const step = testInfo._addStep({ category: 'test.step', title, location: options.location, box: options.box });
-    return await zones.run('stepZone', step, async () => {
-      let result;
-      let error;
+    return await currentZone().with('stepZone', step).run(async () => {
       try {
-        result = await raceAgainstDeadline(async () => body(), options.timeout ? monotonicTime() + options.timeout : 0);
-      } catch (e) {
-        error = e;
-      }
-      if (result?.timedOut) {
-        const error = new errors.TimeoutError(`Step timeout ${options.timeout}ms exceeded.`);
+        let result: Awaited<ReturnType<typeof raceAgainstDeadline<T>>> | undefined = undefined;
+        result = await raceAgainstDeadline(async () => {
+          try {
+            return await step.info._runStepBody(expectation === 'skip', body);
+          } catch (e) {
+            // If the step timed out, the test fixtures will tear down, which in turn
+            // will abort unfinished actions in the step body. Record such errors here.
+            if (result?.timedOut)
+              testInfo._failWithError(e);
+            throw e;
+          }
+        }, options.timeout ? monotonicTime() + options.timeout : 0);
+        if (result.timedOut)
+          throw new errors.TimeoutError(`Step timeout of ${options.timeout}ms exceeded.`);
+        step.complete({});
+        return result.result;
+      } catch (error) {
         step.complete({ error });
         throw error;
       }
-      const expectedToFail = expectation === 'fail';
-      if (error) {
-        step.complete({ error });
-        if (expectedToFail)
-          return undefined as T;
-        throw error;
-      }
-      if (expectedToFail) {
-        error = new Error(`Step is expected to fail, but passed`);
-        step.complete({ error });
-        throw error;
-      }
-      step.complete({});
-      return result!.result;
     });
   }
 

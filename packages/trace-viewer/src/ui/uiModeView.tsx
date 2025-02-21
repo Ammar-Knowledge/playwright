@@ -28,7 +28,6 @@ import { ToolbarButton } from '@web/components/toolbarButton';
 import { Toolbar } from '@web/components/toolbar';
 import type { XtermDataSource } from '@web/components/xtermWrapper';
 import { XtermWrapper } from '@web/components/xtermWrapper';
-import { useDarkModeSetting } from '@web/theme';
 import { clsx, settings, useSetting } from '@web/uiUtils';
 import { statusEx, TestTree } from '@testIsomorphic/testTree';
 import type { TreeItem  } from '@testIsomorphic/testTree';
@@ -37,6 +36,9 @@ import { FiltersView } from './uiModeFiltersView';
 import { TestListView } from './uiModeTestListView';
 import { TraceView } from './uiModeTraceView';
 import { SettingsView } from './settingsView';
+import { DefaultSettingsView } from './defaultSettingsView';
+import { GitCommitInfoProvider } from './errorsTab';
+import { LLMProvider } from './llm';
 
 let xtermSize = { cols: 80, rows: 24 };
 const xtermDataSource: XtermDataSource = {
@@ -104,7 +106,6 @@ export const UIModeView: React.FC<{}> = ({
   const [singleWorker, setSingleWorker] = React.useState(false);
   const [showBrowser, setShowBrowser] = React.useState(false);
   const [updateSnapshots, setUpdateSnapshots] = React.useState(false);
-  const [darkMode, setDarkMode] = useDarkModeSetting();
 
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -398,7 +399,7 @@ export const UIModeView: React.FC<{}> = ({
     });
   }, [closeInstallDialog, testServerConnection]);
 
-  return <div className='vbox ui-mode'>
+  return <LLMProvider><div className='vbox ui-mode'>
     {!hasBrowsers && <dialog ref={dialogRef}>
       <div className='title'><span className='codicon codicon-lightbulb'></span>Install browsers</div>
       <div className='body'>
@@ -431,13 +432,15 @@ export const UIModeView: React.FC<{}> = ({
           <XtermWrapper source={xtermDataSource}></XtermWrapper>
         </div>
         <div className={clsx('vbox', isShowingOutput && 'hidden')}>
-          <TraceView
-            pathSeparator={queryParams.pathSeparator}
-            item={selectedItem}
-            rootDir={testModel?.config?.rootDir}
-            revealSource={revealSource}
-            onOpenExternally={location => testServerConnection?.openNoReply({ location: { file: location.file, line: location.line, column: location.column } })}
-          />
+          <GitCommitInfoProvider gitCommitInfo={testModel?.config.metadata['git.commit.info']}>
+            <TraceView
+              pathSeparator={queryParams.pathSeparator}
+              item={selectedItem}
+              rootDir={testModel?.config?.rootDir}
+              revealSource={revealSource}
+              onOpenExternally={location => testServerConnection?.openNoReply({ location: { file: location.file, line: location.line, column: location.column } })}
+            />
+          </GitCommitInfoProvider>
         </div>
       </div>}
       sidebar={<div className='vbox ui-mode-sidebar'>
@@ -521,11 +524,9 @@ export const UIModeView: React.FC<{}> = ({
           />
           <div className='section-title'>Settings</div>
         </Toolbar>
-        {settingsVisible && <SettingsView settings={[
-          { value: darkMode, set: setDarkMode, name: 'Dark mode' },
-        ]} />}
+        {settingsVisible && <DefaultSettingsView />}
       </div>
       }
     />
-  </div>;
+  </div></LLMProvider>;
 };

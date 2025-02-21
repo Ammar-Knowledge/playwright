@@ -15,32 +15,35 @@
  * limitations under the License.
  */
 
-import type * as channels from '@protocol/channels';
-import type { ConsoleMessage } from './console';
-import * as dom from './dom';
-import { helper } from './helper';
-import type { RegisteredListener } from '../utils/eventsHelper';
-import { eventsHelper } from '../utils/eventsHelper';
-import * as js from './javascript';
-import * as network from './network';
-import type { Dialog } from './dialog';
-import { Page } from './page';
-import * as types from './types';
 import { BrowserContext } from './browserContext';
-import type { Progress } from './progress';
-import { ProgressController } from './progress';
-import { LongStandingScope, assert, constructURLBasedOnBaseURL, makeWaitForNextTask, monotonicTime, asLocator, compressCallLog } from '../utils';
-import { ManualPromise } from '../utils/manualPromise';
-import { debugLogger } from '../utils/debugLogger';
-import type { CallMetadata } from './instrumentation';
-import { serverSideCallMetadata, SdkObject } from './instrumentation';
-import type { InjectedScript, ElementStateWithoutStable, FrameExpectParams } from './injected/injectedScript';
-import { isSessionClosedError } from './protocolError';
-import { type ParsedSelector, isInvalidSelectorError } from '../utils/isomorphic/selectorParser';
-import type { ScreenshotOptions } from './screenshotter';
-import { FrameSelectors } from './frameSelectors';
+import * as dom from './dom';
 import { TimeoutError } from './errors';
 import { prepareFilesForUpload } from './fileUploadUtils';
+import { FrameSelectors } from './frameSelectors';
+import { helper } from './helper';
+import { SdkObject, serverSideCallMetadata } from './instrumentation';
+import * as js from './javascript';
+import * as network from './network';
+import { Page } from './page';
+import { ProgressController } from './progress';
+import * as types from './types';
+import { LongStandingScope, asLocator, assert, constructURLBasedOnBaseURL, makeWaitForNextTask, monotonicTime } from '../utils';
+import { isSessionClosedError } from './protocolError';
+import { debugLogger } from './utils/debugLogger';
+import { eventsHelper } from './utils/eventsHelper';
+import {  isInvalidSelectorError } from '../utils/isomorphic/selectorParser';
+import { ManualPromise } from '../utils/isomorphic/manualPromise';
+import { compressCallLog } from './callLog';
+
+import type { ConsoleMessage } from './console';
+import type { Dialog } from './dialog';
+import type { ElementStateWithoutStable, FrameExpectParams, InjectedScript } from './injected/injectedScript';
+import type { CallMetadata } from './instrumentation';
+import type { Progress } from './progress';
+import type { ScreenshotOptions } from './screenshotter';
+import type { RegisteredListener } from './utils/eventsHelper';
+import type { ParsedSelector } from '../utils/isomorphic/selectorParser';
+import type * as channels from '@protocol/channels';
 
 type ContextData = {
   contextPromise: ManualPromise<dom.FrameExecutionContext | { destroyedReason: string }>;
@@ -1301,7 +1304,9 @@ export class Frame extends SdkObject {
     const result = await this._callOnElementOnceMatches(metadata, selector, (injected, element, data) => {
       return injected.elementState(element, data.state);
     }, { state }, options, scope);
-    return dom.throwRetargetableDOMError(result);
+    if (result.received === 'error:notconnected')
+      dom.throwElementIsNotAttached();
+    return result.matches;
   }
 
   async isVisible(metadata: CallMetadata, selector: string, options: types.StrictOptions = {}, scope?: dom.ElementHandle): Promise<boolean> {
@@ -1319,8 +1324,8 @@ export class Frame extends SdkObject {
         return false;
       return await resolved.injected.evaluate((injected, { info, root }) => {
         const element = injected.querySelector(info.parsed, root || document, info.strict);
-        const state = element ? injected.elementState(element, 'visible') : false;
-        return state === 'error:notconnected' ? false : state;
+        const state = element ? injected.elementState(element, 'visible') : { matches: false, received: 'error:notconnected' };
+        return state.matches;
       }, { info: resolved.info, root: resolved.frame === this ? scope : undefined });
     } catch (e) {
       if (js.isJavaScriptErrorInEvaluate(e) || isInvalidSelectorError(e) || isSessionClosedError(e))
@@ -1406,10 +1411,10 @@ export class Frame extends SdkObject {
     });
   }
 
-  async ariaSnapshot(metadata: CallMetadata, selector: string, options: types.TimeoutOptions = {}): Promise<string> {
+  async ariaSnapshot(metadata: CallMetadata, selector: string, options: { id?: boolean, mode?: 'raw' | 'regex' } & types.TimeoutOptions = {}): Promise<string> {
     const controller = new ProgressController(metadata, this);
     return controller.run(async progress => {
-      return await this._retryWithProgressIfNotConnected(progress, selector, true /* strict */, true /* performActionPreChecks */, handle => handle.ariaSnapshot());
+      return await this._retryWithProgressIfNotConnected(progress, selector, true /* strict */, true /* performActionPreChecks */, handle => handle.ariaSnapshot(options));
     }, this._page._timeoutSettings.timeout(options));
   }
 
@@ -1715,7 +1720,7 @@ export class Frame extends SdkObject {
     }, { source, arg });
   }
 
-  async resetStorageForCurrentOriginBestEffort(newStorage: channels.OriginStorage | undefined) {
+  async resetStorageForCurrentOriginBestEffort(newStorage: channels.SetOriginStorage | undefined) {
     const context = await this._utilityContext();
     await context.evaluate(async ({ ls }) => {
       // Clean DOMStorage.
@@ -1809,26 +1814,6 @@ function verifyLifecycle(name: string, waitUntil: types.LifecycleEvent): types.L
 }
 
 function renderUnexpectedValue(expression: string, received: any): string {
-  if (expression === 'to.be.checked')
-    return received ? 'checked' : 'unchecked';
-  if (expression === 'to.be.unchecked')
-    return received ? 'unchecked' : 'checked';
-  if (expression === 'to.be.visible')
-    return received ? 'visible' : 'hidden';
-  if (expression === 'to.be.hidden')
-    return received ? 'hidden' : 'visible';
-  if (expression === 'to.be.enabled')
-    return received ? 'enabled' : 'disabled';
-  if (expression === 'to.be.disabled')
-    return received ? 'disabled' : 'enabled';
-  if (expression === 'to.be.editable')
-    return received ? 'editable' : 'readonly';
-  if (expression === 'to.be.readonly')
-    return received ? 'readonly' : 'editable';
-  if (expression === 'to.be.empty')
-    return received ? 'empty' : 'not empty';
-  if (expression === 'to.be.focused')
-    return received ? 'focused' : 'not focused';
   if (expression === 'to.match.aria')
     return received ? received.raw : received;
   return received;
