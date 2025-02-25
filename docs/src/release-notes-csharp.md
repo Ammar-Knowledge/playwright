@@ -4,12 +4,43 @@ title: "Release notes"
 toc_max_heading_level: 2
 ---
 
+## Version 1.50
+
+### Support for Xunit
+
+* Support for xUnit 2.8+ via [Microsoft.Playwright.Xunit](https://www.nuget.org/packages/Microsoft.Playwright.Xunit). Follow our [Getting Started](./intro.md) guide to learn more.
+
+### Miscellaneous
+
+* Added method [`method: LocatorAssertions.toHaveAccessibleErrorMessage`] to assert the Locator points to an element with a given [aria errormessage](https://w3c.github.io/aria/#aria-errormessage).
+
+### UI updates
+
+* New button in Codegen for picking elements to produce aria snapshots.
+* Additional details (such as keys pressed) are now displayed alongside action API calls in traces.
+* Display of `canvas` content in traces is error-prone. Display is now disabled by default, and can be enabled via the `Display canvas content` UI setting.
+* `Call` and `Network` panels now display additional time information.
+
+### Breaking
+
+* [`method: LocatorAssertions.toBeEditable`] and [`method: Locator.isEditable`] now throw if the target element is not `<input>`, `<select>`, or a number of other editable elements.
+
+### Browser Versions
+
+* Chromium 133.0.6943.16
+* Mozilla Firefox 134.0
+* WebKit 18.2
+
+This version was also tested against the following stable channels:
+
+* Google Chrome 132
+* Microsoft Edge 132
 
 ## Version 1.49
 
 ### Aria snapshots
 
-New assertion [`method: LocatorAssertions.toMatchAriaSnapshot#2`] verifies page structure by comparing to an expected accessibility tree, represented as YAML.
+New assertion [`method: LocatorAssertions.toMatchAriaSnapshot`] verifies page structure by comparing to an expected accessibility tree, represented as YAML.
 
 ```csharp
 await page.GotoAsync("https://playwright.dev");
@@ -793,9 +824,9 @@ This version was also tested against the following stable channels:
 
   ```html
   <select multiple>
-    <option value="red">Red</div>
-    <option value="green">Green</div>
-    <option value="blue">Blue</div>
+    <option value="red">Red</option>
+    <option value="green">Green</option>
+    <option value="blue">Blue</option>
   </select>
   ```
 
