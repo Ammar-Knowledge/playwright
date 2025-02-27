@@ -880,6 +880,7 @@ context cookies from the response. The method will automatically follow redirect
     - `localStorage` <[Array]<[Object]>>
       - `name` <[string]>
       - `value` <[string]>
+    - `indexedDB` <[Array]<[unknown]>>
 
 Returns storage state for this request context, contains current cookies and local storage snapshot if it was passed to the constructor.
 
@@ -890,3 +891,9 @@ Returns storage state for this request context, contains current cookies and loc
 
 ### option: APIRequestContext.storageState.path = %%-storagestate-option-path-%%
 * since: v1.16
+
+### option: APIRequestContext.storageState.indexedDB
+* since: v1.51
+- `indexedDB` ?<boolean>
+
+Set to `true` to include IndexedDB in the storage state snapshot.

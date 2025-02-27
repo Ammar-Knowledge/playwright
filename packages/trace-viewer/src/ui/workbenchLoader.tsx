@@ -14,14 +14,14 @@
   limitations under the License.
 */
 
-import { ToolbarButton } from '@web/components/toolbarButton';
 import * as React from 'react';
 import type { ContextEntry } from '../types/entries';
 import { MultiTraceModel } from './modelUtil';
 import './workbenchLoader.css';
-import { toggleTheme } from '@web/theme';
 import { Workbench } from './workbench';
 import { TestServerConnection, WebSocketTestServerTransport } from '@testIsomorphic/testServerConnection';
+import { SettingsToolbarButton } from './settingsToolbarButton';
+import { LLMProvider } from './llm';
 
 export const WorkbenchLoader: React.FunctionComponent<{
 }> = () => {
@@ -161,12 +161,14 @@ export const WorkbenchLoader: React.FunctionComponent<{
       <div className='product'>Playwright</div>
       {model.title && <div className='title'>{model.title}</div>}
       <div className='spacer'></div>
-      <ToolbarButton icon='color-mode' title='Toggle color mode' toggled={false} onClick={() => toggleTheme()}></ToolbarButton>
+      <SettingsToolbarButton />
     </div>
     <div className='progress'>
       <div className='inner-progress' style={{ width: progress.total ? (100 * progress.done / progress.total) + '%' : 0 }}></div>
     </div>
-    <Workbench model={model} inert={showFileUploadDropArea} />
+    <LLMProvider>
+      <Workbench model={model} inert={showFileUploadDropArea} />
+    </LLMProvider>
     {fileForLocalModeError && <div className='drop-target'>
       <div>Trace Viewer uses Service Workers to show traces. To view trace:</div>
       <div style={{ paddingTop: 20 }}>
