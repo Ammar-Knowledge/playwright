@@ -15,7 +15,7 @@
 */
 
 import type { Language } from '../../playwright-core/src/utils/isomorphic/locatorGenerators';
-import type { ParsedYaml } from '@isomorphic/ariaSnapshot';
+import type { AriaTemplateNode } from '@isomorphic/ariaSnapshot';
 
 export type Point = { x: number; y: number };
 
@@ -55,7 +55,7 @@ export type UIState = {
   mode: Mode;
   actionPoint?: Point;
   actionSelector?: string;
-  ariaTemplate?: ParsedYaml;
+  ariaTemplate?: AriaTemplateNode;
   language: Language;
   testIdAttributeName: string;
   overlay: OverlayState;
@@ -101,7 +101,7 @@ declare global {
   interface Window {
     playwrightSetMode: (mode: Mode) => void;
     playwrightSetPaused: (paused: boolean) => void;
-    playwrightSetSources: (sources: Source[]) => void;
+    playwrightSetSources: (sources: Source[], primaryPageURL: string | undefined) => void;
     playwrightSetOverlayVisible: (visible: boolean) => void;
     playwrightUpdateLogs: (callLogs: CallLog[]) => void;
     playwrightSetRunningFile: (file: string | undefined) => void;

@@ -24,7 +24,7 @@ import { Anchor, AttachmentLink, generateTraceUrl, testResultHref } from './link
 import { statusIcon } from './statusIcon';
 import type { ImageDiff } from '@web/shared/imageDiffView';
 import { ImageDiffView } from '@web/shared/imageDiffView';
-import { TestErrorView, TestScreenshotErrorView } from './testErrorView';
+import { CodeSnippet, TestErrorView, TestScreenshotErrorView } from './testErrorView';
 import * as icons from './icons';
 import './testResultView.css';
 
@@ -90,7 +90,7 @@ export const TestResultView: React.FC<{
       {errors.map((error, index) => {
         if (error.type === 'screenshot')
           return <TestScreenshotErrorView key={'test-result-error-message-' + index} errorPrefix={error.errorPrefix} diff={error.diff!} errorSuffix={error.errorSuffix}></TestScreenshotErrorView>;
-        return <TestErrorView key={'test-result-error-message-' + index} error={error.error!}></TestErrorView>;
+        return <TestErrorView key={'test-result-error-message-' + index} error={error.error!} result={result}></TestErrorView>;
       })}
     </AutoChip>}
     {!!result.steps.length && <AutoChip header='Test Steps'>
@@ -134,7 +134,7 @@ export const TestResultView: React.FC<{
       </div>)}
     </AutoChip></Anchor>}
 
-    {!!otherAttachments.size && <AutoChip header='Attachments' revealOnAnchorId={otherAttachmentAnchors}>
+    {!!otherAttachments.size && <AutoChip header='Attachments' revealOnAnchorId={otherAttachmentAnchors} dataTestId='attachments'>
       {[...otherAttachments].map((a, i) =>
         <Anchor key={`attachment-link-${i}`} id={`attachment-${result.attachments.indexOf(a)}`}>
           <AttachmentLink attachment={a} result={result} openInNewTab={a.contentType.startsWith('text/html')} />
@@ -176,15 +176,14 @@ const StepTreeItem: React.FC<{
 }> = ({ test, step, result, depth }) => {
   return <TreeItem title={<span aria-label={step.title}>
     <span style={{ float: 'right' }}>{msToString(step.duration)}</span>
-    {step.attachments.length > 0 && <a style={{ float: 'right' }} title='link to attachment' href={testResultHref({ test, result, anchor: `attachment-${step.attachments[0]}` })} onClick={evt => { evt.stopPropagation(); }}>{icons.attachment()}</a>}
-    {statusIcon(step.error || step.duration === -1 ? 'failed' : 'passed')}
+    {step.attachments.length > 0 && <a style={{ float: 'right' }} title={`reveal attachment`} href={testResultHref({ test, result, anchor: `attachment-${step.attachments[0]}` })} onClick={evt => { evt.stopPropagation(); }}>{icons.attachment()}</a>}
+    {statusIcon(step.error || step.duration === -1 ? 'failed' : (step.skipped ? 'skipped' : 'passed'))}
     <span>{step.title}</span>
     {step.count > 1 && <> ✕ <span className='test-result-counter'>{step.count}</span></>}
     {step.location && <span className='test-result-path'>— {step.location.file}:{step.location.line}</span>}
-  </span>} loadChildren={step.steps.length + (step.snippet ? 1 : 0) ? () => {
-    const children = step.steps.map((s, i) => <StepTreeItem key={i} step={s} depth={depth + 1} result={result} test={test} />);
-    if (step.snippet)
-      children.unshift(<TestErrorView testId='test-snippet' key='line' error={step.snippet}/>);
-    return children;
+  </span>} loadChildren={step.steps.length || step.snippet ? () => {
+    const snippet = step.snippet ? [<CodeSnippet testId='test-snippet' key='line' code={step.snippet} />] : [];
+    const steps = step.steps.map((s, i) => <StepTreeItem key={i} step={s} depth={depth + 1} result={result} test={test} />);
+    return snippet.concat(steps);
   } : undefined} depth={depth}/>;
 };

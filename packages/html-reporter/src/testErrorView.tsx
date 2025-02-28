@@ -19,13 +19,65 @@ import * as React from 'react';
 import './testErrorView.css';
 import type { ImageDiff } from '@web/shared/imageDiffView';
 import { ImageDiffView } from '@web/shared/imageDiffView';
+import type { TestResult } from './types';
+import { fixTestPrompt } from '@web/components/prompts';
+import { useHTMLReport } from './reportContext';
+import type { MetadataWithCommitInfo } from '@playwright/isomorphic/types';
 
 export const TestErrorView: React.FC<{
   error: string;
   testId?: string;
-}> = ({ error, testId }) => {
-  const html = React.useMemo(() => ansiErrorToHtml(error), [error]);
-  return <div className='test-error-view test-error-text' data-testid={testId} dangerouslySetInnerHTML={{ __html: html || '' }}></div>;
+  result?: TestResult
+}> = ({ error, testId, result }) => {
+  return (
+    <CodeSnippet code={error} testId={testId}>
+      <div style={{ float: 'right', margin: 10 }}>
+        <PromptButton error={error} result={result} />
+      </div>
+    </CodeSnippet>
+  );
+};
+
+export const CodeSnippet = ({ code, children, testId }: React.PropsWithChildren<{ code: string; testId?: string; }>) => {
+  const html = React.useMemo(() => ansiErrorToHtml(code), [code]);
+  return (
+    <div className='test-error-container test-error-text' data-testid={testId}>
+      {children}
+      <div className='test-error-view' dangerouslySetInnerHTML={{ __html: html || '' }}></div>
+    </div>
+  );
+};
+
+const PromptButton: React.FC<{
+  error: string;
+  result?: TestResult;
+}> = ({ error, result }) => {
+  const report = useHTMLReport();
+  const commitInfo = report?.metadata as MetadataWithCommitInfo | undefined;
+  const pageSnapshot = result?.attachments.find(a => a.name === 'pageSnapshot')?.body;
+  const prompt = React.useMemo(() => fixTestPrompt(
+      error,
+      commitInfo?.gitDiff,
+      pageSnapshot
+  ), [commitInfo, pageSnapshot, error]);
+
+  const [copied, setCopied] = React.useState(false);
+
+  if (!pageSnapshot)
+    return;
+
+  return <button
+    className='button'
+    style={{ minWidth: 100 }}
+    onClick={async () => {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+      }, 3000);
+    }}>
+    {copied ? 'Copied' : 'Copy as Prompt'}
+  </button>;
 };
 
 export const TestScreenshotErrorView: React.FC<{

@@ -15,9 +15,10 @@
  */
 
 import url from 'url';
+
 import { addToCompilationCache, serializeCompilationCache } from '../transform/compilationCache';
-import { singleTSConfig, transformConfig } from '../transform/transform';
 import { PortTransport } from '../transform/portTransport';
+import { singleTSConfig, transformConfig } from '../transform/transform';
 
 let loaderChannel: PortTransport | undefined;
 // Node.js < 20
@@ -30,7 +31,6 @@ export function registerESMLoader() {
   const { port1, port2 } = new MessageChannel();
   // register will wait until the loader is initialized.
   require('node:module').register(url.pathToFileURL(require.resolve('../transform/esmLoader')), {
-    parentURL: url.pathToFileURL(__filename),
     data: { port: port2 },
     transferList: [port2],
   });

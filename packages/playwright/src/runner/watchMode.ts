@@ -14,20 +14,25 @@
  * limitations under the License.
  */
 
-import readline from 'readline';
 import path from 'path';
-import { createGuid, eventsHelper, getPackageManagerExecCommand, ManualPromise } from 'playwright-core/lib/utils';
-import type { ConfigLocation } from '../common/config';
-import type { FullResult } from '../../types/testReporter';
-import { colors } from 'playwright-core/lib/utilsBundle';
-import { enquirer } from '../utilsBundle';
-import { separator } from '../reporters/base';
-import { PlaywrightServer } from 'playwright-core/lib/remote/playwrightServer';
-import { TestServerDispatcher } from './testServer';
+import readline from 'readline';
 import { EventEmitter } from 'stream';
-import { type TestServerTransport, TestServerConnection } from '../isomorphic/testServerConnection';
-import { TeleSuiteUpdater } from '../isomorphic/teleSuiteUpdater';
+
+import { PlaywrightServer } from 'playwright-core/lib/remote/playwrightServer';
+import { ManualPromise, createGuid, eventsHelper, getPackageManagerExecCommand } from 'playwright-core/lib/utils';
+import { colors } from 'playwright-core/lib/utils';
+
+import { separator, terminalScreen } from '../reporters/base';
+import { enquirer } from '../utilsBundle';
+import { TestServerDispatcher } from './testServer';
 import { restartWithExperimentalTsEsm } from '../common/configLoader';
+import { TeleSuiteUpdater } from '../isomorphic/teleSuiteUpdater';
+import { TestServerConnection  } from '../isomorphic/testServerConnection';
+
+import type { FullResult } from '../../types/testReporter';
+import type { ConfigLocation } from '../common/config';
+import type { TestServerTransport } from '../isomorphic/testServerConnection';
+
 
 class InMemoryTransport extends EventEmitter implements TestServerTransport {
   public readonly _send: (data: string) => void;
@@ -332,7 +337,7 @@ function readCommand() {
       return 'exit';
 
     if (name === 'h') {
-      process.stdout.write(`${separator()}
+      process.stdout.write(`${separator(terminalScreen)}
 Run tests
   ${colors.bold('enter')}    ${colors.dim('run tests')}
   ${colors.bold('f')}        ${colors.dim('run failed tests')}
@@ -380,7 +385,7 @@ function printConfiguration(options: WatchModeOptions, title?: string) {
     tokens.push(colors.dim(`(${title})`));
   tokens.push(colors.dim(`#${seq++}`));
   const lines: string[] = [];
-  const sep = separator();
+  const sep = separator(terminalScreen);
   lines.push('\x1Bc' + sep);
   lines.push(`${tokens.join(' ')}`);
   lines.push(`${colors.dim('Show & reuse browser:')} ${colors.bold(showBrowserServer ? 'on' : 'off')}`);
@@ -388,7 +393,7 @@ function printConfiguration(options: WatchModeOptions, title?: string) {
 }
 
 function printBufferPrompt(dirtyTestFiles: Set<string>, rootDir: string) {
-  const sep = separator();
+  const sep = separator(terminalScreen);
   process.stdout.write('\x1Bc');
   process.stdout.write(`${sep}\n`);
 
@@ -404,7 +409,7 @@ function printBufferPrompt(dirtyTestFiles: Set<string>, rootDir: string) {
 }
 
 function printPrompt() {
-  const sep = separator();
+  const sep = separator(terminalScreen);
   process.stdout.write(`
 ${sep}
 ${colors.dim('Waiting for file changes. Press')} ${colors.bold('enter')} ${colors.dim('to run tests')}, ${colors.bold('q')} ${colors.dim('to quit or')} ${colors.bold('h')} ${colors.dim('for more options.')}

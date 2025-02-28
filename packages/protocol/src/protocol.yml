@@ -222,6 +222,54 @@ NameValue:
     name: string
     value: string
 
+IndexedDBDatabase:
+  type: object
+  properties:
+    name: string
+    version: number
+    stores:
+      type: array
+      items:
+        type: object
+        properties:
+          name: string
+          autoIncrement: boolean
+          keyPath: string?
+          keyPathArray:
+            type: array?
+            items: string
+          records:
+            type: array
+            items:
+              type: object
+              properties:
+                key: json?
+                keyEncoded: json?
+                value: json?
+                valueEncoded: json?
+          indexes:
+            type: array
+            items:
+              type: object
+              properties:
+                name: string
+                keyPath: string?
+                keyPathArray:
+                  type: array?
+                  items: string
+                multiEntry: boolean
+                unique: boolean
+
+SetOriginStorage:
+  type: object
+  properties:
+    origin: string
+    localStorage:
+      type: array
+      items: NameValue
+    indexedDB:
+      type: array?
+      items: IndexedDBDatabase
 
 OriginStorage:
   type: object
@@ -230,7 +278,9 @@ OriginStorage:
     localStorage:
       type: array
       items: NameValue
-
+    indexedDB:
+      type: array
+      items: IndexedDBDatabase
 
 SerializedError:
   type: object
@@ -326,6 +376,8 @@ APIRequestContext:
           items: string
 
     storageState:
+      parameters:
+        indexedDB: boolean?
       returns:
         cookies:
           type: array
@@ -508,6 +560,12 @@ ContextOptions:
       - accept
       - deny
       - internal-browser-default
+    contrast:
+      type: enum?
+      literals:
+      - no-preference
+      - more
+      - no-override
     baseURL: string?
     recordVideo:
       type: object?
@@ -693,6 +751,7 @@ Playwright:
         extraHTTPHeaders:
           type: array?
           items: NameValue
+        failOnStatusCode: boolean?
         clientCertificates:
           type: array?
           items:
@@ -730,7 +789,7 @@ Playwright:
               items: NetworkCookie
             origins:
               type: array?
-              items: OriginStorage
+              items: SetOriginStorage
         tracesDir: string?
 
       returns:
@@ -964,7 +1023,7 @@ Browser:
               items: SetNetworkCookie
             origins:
               type: array?
-              items: OriginStorage
+              items: SetOriginStorage
       returns:
         context: BrowserContext
 
@@ -986,7 +1045,7 @@ Browser:
               items: SetNetworkCookie
             origins:
               type: array?
-              items: OriginStorage
+              items: SetOriginStorage
       returns:
         context: BrowserContext
 
@@ -1178,6 +1237,8 @@ BrowserContext:
         offline: boolean
 
     storageState:
+      parameters:
+        indexedDB: boolean?
       returns:
         cookies:
           type: array
@@ -1198,11 +1259,6 @@ BrowserContext:
           literals:
           - inspecting
           - recording
-        codegenMode:
-          type: enum?
-          literals:
-          - actions
-          - trace-events
         pauseOnNextStatement: boolean?
         testIdAttributeName: string?
         launchOptions: json?
@@ -1424,6 +1480,12 @@ Page:
           literals:
           - active
           - none
+          - no-override
+        contrast:
+          type: enum?
+          literals:
+          - no-preference
+          - more
           - no-override
       flags:
         snapshot: true
@@ -1675,6 +1737,8 @@ Page:
         root: ElementHandle?
       returns:
         rootAXNode: AXNode?
+      flags:
+        snapshot: true
 
     pdf:
       parameters:
@@ -1882,9 +1946,17 @@ Frame:
     ariaSnapshot:
       parameters:
         selector: string
+        id: boolean?
+        mode:
+          type: enum?
+          literals:
+          - raw
+          - regex
         timeout: number?
       returns:
         snapshot: string
+      flags:
+        snapshot: true
 
     blur:
       parameters:
@@ -1943,6 +2015,8 @@ Frame:
     content:
       returns:
         value: string
+      flags:
+        snapshot: true
 
     dragAndDrop:
       parameters:
@@ -2202,6 +2276,8 @@ Frame:
         strict: boolean?
       returns:
         element: ElementHandle?
+      flags:
+        snapshot: true
 
     querySelectorAll:
       parameters:
@@ -2210,12 +2286,16 @@ Frame:
         elements:
           type: array
           items: ElementHandle
+      flags:
+        snapshot: true
 
     queryCount:
       parameters:
         selector: string
       returns:
         value: number
+      flags:
+        snapshot: true
 
     selectOption:
       parameters:
@@ -2540,6 +2620,8 @@ ElementHandle:
     boundingBox:
       returns:
         value: Rect?
+      flags:
+        snapshot: true
 
     check:
       parameters:
@@ -2585,6 +2667,8 @@ ElementHandle:
     contentFrame:
       returns:
         frame: Frame?
+      flags:
+        snapshot: true
 
     dblclick:
       parameters:
@@ -2636,6 +2720,10 @@ ElementHandle:
       flags:
         slowMo: true
         snapshot: true
+
+    generateLocatorString:
+      returns:
+        value: string?
 
     getAttribute:
       parameters:
@@ -2739,6 +2827,8 @@ ElementHandle:
         strict: boolean?
       returns:
         element: ElementHandle?
+      flags:
+        snapshot: true
 
     querySelectorAll:
       parameters:
@@ -2747,6 +2837,8 @@ ElementHandle:
         elements:
           type: array
           items: ElementHandle
+      flags:
+        snapshot: true
 
     screenshot:
       parameters:

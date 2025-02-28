@@ -14,23 +14,26 @@
  * limitations under the License.
  */
 
-import { open } from 'playwright-core/lib/utilsBundle';
-import { MultiMap, getPackageManagerExecCommand } from 'playwright-core/lib/utils';
 import fs from 'fs';
 import path from 'path';
-import type { TransformCallback } from 'stream';
 import { Transform } from 'stream';
-import { codeFrameColumns } from '../transform/babelBundle';
-import type * as api from '../../types/testReporter';
-import { HttpServer, assert, calculateSha1, copyFileAndMakeWritable, gracefullyProcessExitDoNotHang, removeFolders, sanitizeForFilePath, toPosixPath } from 'playwright-core/lib/utils';
-import { colors, formatError, formatResultFailure, stripAnsiEscapes } from './base';
-import { resolveReporterOutputPath } from '../util';
-import type { Metadata } from '../../types/test';
-import type { ZipFile } from 'playwright-core/lib/zipBundle';
-import { yazl } from 'playwright-core/lib/zipBundle';
+
+import { HttpServer, MultiMap, assert, calculateSha1, getPackageManagerExecCommand, copyFileAndMakeWritable, gracefullyProcessExitDoNotHang, removeFolders, sanitizeForFilePath, toPosixPath } from 'playwright-core/lib/utils';
+import { colors } from 'playwright-core/lib/utils';
+import { open } from 'playwright-core/lib/utilsBundle';
 import { mime } from 'playwright-core/lib/utilsBundle';
-import type { HTMLReport, Stats, TestAttachment, TestCase, TestCaseSummary, TestFile, TestFileSummary, TestResult, TestStep } from '@html-reporter/types';
+import { yazl } from 'playwright-core/lib/zipBundle';
+
+import { formatError, formatResultFailure, internalScreen, stripAnsiEscapes } from './base';
+import { codeFrameColumns } from '../transform/babelBundle';
+import { resolveReporterOutputPath } from '../util';
+
 import type { ReporterV2 } from './reporterV2';
+import type { Metadata } from '../../types/test';
+import type * as api from '../../types/testReporter';
+import type { HTMLReport, Stats, TestAttachment, TestCase, TestCaseSummary, TestFile, TestFileSummary, TestResult, TestStep } from '@html-reporter/types';
+import type { ZipFile } from 'playwright-core/lib/zipBundle';
+import type { TransformCallback } from 'stream';
 
 type TestEntry = {
   testCase: TestCase;
@@ -297,7 +300,7 @@ class HtmlBuilder {
       files: [...data.values()].map(e => e.testFileSummary),
       projectNames: projectSuites.map(r => r.project()!.name),
       stats: { ...[...data.values()].reduce((a, e) => addStats(a, e.testFileSummary.stats), emptyStats()) },
-      errors: topLevelErrors.map(error => formatError(error, true).message),
+      errors: topLevelErrors.map(error => formatError(internalScreen, error).message),
     };
     htmlReport.files.sort((f1, f2) => {
       const w1 = f1.stats.unexpected * 1000 + f1.stats.flaky;
@@ -446,6 +449,17 @@ class HtmlBuilder {
         return a;
       }
 
+      if (a.name === 'pageSnapshot') {
+        try {
+          const body = fs.readFileSync(a.path!, { encoding: 'utf-8' });
+          return {
+            name: 'pageSnapshot',
+            contentType: a.contentType,
+            body,
+          };
+        } catch {}
+      }
+
       if (a.path) {
         let fileName = a.path;
         try {
@@ -506,7 +520,7 @@ class HtmlBuilder {
       startTime: result.startTime.toISOString(),
       retry: result.retry,
       steps: dedupeSteps(result.steps).map(s => this._createTestStep(s, result)),
-      errors: formatResultFailure(test, result, '', true).map(error => error.message),
+      errors: formatResultFailure(internalScreen, test, result, '').map(error => error.message),
       status: result.status,
       attachments: this._serializeAttachments([
         ...result.attachments,
@@ -517,8 +531,12 @@ class HtmlBuilder {
 
   private _createTestStep(dedupedStep: DedupedStep, result: api.TestResult): TestStep {
     const { step, duration, count } = dedupedStep;
+    const skipped = dedupedStep.step.annotations?.find(a => a.type === 'skip');
+    let title = step.title;
+    if (skipped)
+      title = `${title} (skipped${skipped.description ? ': ' + skipped.description : ''})`;
     const testStep: TestStep = {
-      title: step.title,
+      title,
       startTime: step.startTime.toISOString(),
       duration,
       steps: dedupeSteps(step.steps).map(s => this._createTestStep(s, result)),
@@ -530,7 +548,8 @@ class HtmlBuilder {
       }),
       location: this._relativeLocation(step.location),
       error: step.error?.message,
-      count
+      count,
+      skipped: !!skipped,
     };
     if (step.location)
       this._stepsInFile.set(step.location.file, testStep);

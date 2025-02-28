@@ -155,7 +155,7 @@ Additional locator to match.
 - returns: <[string]>
 
 Captures the aria snapshot of the given element.
-Read more about [aria snapshots](../aria-snapshots.md) and [`method: LocatorAssertions.toMatchAriaSnapshot#2`] for the corresponding assertion.
+Read more about [aria snapshots](../aria-snapshots.md) and [`method: LocatorAssertions.toMatchAriaSnapshot`] for the corresponding assertion.
 
 **Usage**
 
@@ -633,13 +633,11 @@ properties:
 You can also specify [JSHandle] as the property value if you want live objects to be passed into the event:
 
 ```js
-// Note you can only create DataTransfer in Chromium and Firefox
 const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
 await locator.dispatchEvent('dragstart', { dataTransfer });
 ```
 
 ```java
-// Note you can only create DataTransfer in Chromium and Firefox
 JSHandle dataTransfer = page.evaluateHandle("() => new DataTransfer()");
 Map<String, Object> arg = new HashMap<>();
 arg.put("dataTransfer", dataTransfer);
@@ -647,13 +645,11 @@ locator.dispatchEvent("dragstart", arg);
 ```
 
 ```python async
-# note you can only create data_transfer in chromium and firefox
 data_transfer = await page.evaluate_handle("new DataTransfer()")
 await locator.dispatch_event("#source", "dragstart", {"dataTransfer": data_transfer})
 ```
 
 ```python sync
-# note you can only create data_transfer in chromium and firefox
 data_transfer = page.evaluate_handle("new DataTransfer()")
 locator.dispatch_event("#source", "dragstart", {"dataTransfer": data_transfer})
 ```
@@ -867,31 +863,6 @@ If [`param: expression`] returns a [Promise], this method will wait for the prom
 If [`param: expression`] throws or rejects, this method throws.
 
 **Usage**
-
-```js
-const tweets = page.locator('.tweet .retweets');
-expect(await tweets.evaluate(node => node.innerText)).toBe('10 retweets');
-```
-
-```java
-Locator tweets = page.locator(".tweet .retweets");
-assertEquals("10 retweets", tweets.evaluate("node => node.innerText"));
-```
-
-```python async
-tweets = page.locator(".tweet .retweets")
-assert await tweets.evaluate("node => node.innerText") == "10 retweets"
-```
-
-```python sync
-tweets = page.locator(".tweet .retweets")
-assert tweets.evaluate("node => node.innerText") == "10 retweets"
-```
-
-```csharp
-var tweets = page.Locator(".tweet .retweets");
-Assert.AreEqual("10 retweets", await tweets.EvaluateAsync("node => node.innerText"));
-```
 
 ### param: Locator.evaluate.expression = %%-evaluate-expression-%%
 * since: v1.14
@@ -1118,6 +1089,9 @@ await rowLocator
 
 ### option: Locator.filter.hasNotText = %%-locator-option-has-not-text-%%
 * since: v1.33
+
+### option: Locator.filter.visible = %%-locator-option-visible-%%
+* since: v1.51
 
 ## method: Locator.first
 * since: v1.14
@@ -2064,9 +2038,9 @@ Triggers a `change` and `input` event once all the provided options have been se
 
 ```html
 <select multiple>
-  <option value="red">Red</div>
-  <option value="green">Green</div>
-  <option value="blue">Blue</div>
+  <option value="red">Red</option>
+  <option value="green">Green</option>
+  <option value="blue">Blue</option>
 </select>
 ```
 
@@ -2361,7 +2335,7 @@ This method expects [Locator] to point to an
 ## async method: Locator.tap
 * since: v1.14
 
-Perform a tap gesture on the element matching the locator.
+Perform a tap gesture on the element matching the locator. For examples of emulating other gestures by manually dispatching touch events, see the [emulating legacy touch events](../touch-events.md) page.
 
 **Details**
 

@@ -75,7 +75,9 @@ export default class MyReporter implements Reporter {
     let location = '';
     if (step.location)
       location = formatLocation(step.location);
-    console.log(formatPrefix(step.category) + indent + step.title + location);
+    const skip = step.annotations?.find(a => a.type === 'skip');
+    const skipped = skip?.description ? ' (skipped: ' + skip.description + ')' : skip ? ' (skipped)' : '';
+    console.log(formatPrefix(step.category) + indent + step.title + location + skipped);
     if (step.error) {
       const errorLocation = this.printErrorLocation ? formatLocation(step.error.location) : '';
       console.log(formatPrefix(step.category) + indent + '↪ error: ' + this.trimError(step.error.message!) + errorLocation);
@@ -362,18 +364,16 @@ hook      |Worker Cleanup
 `);
 });
 
-test('should not pass arguments and return value from step', async ({ runInlineTest }) => {
+test('should not pass return value from step', async ({ runInlineTest }) => {
   const result = await runInlineTest({
     'a.test.ts': `
       import { test, expect } from '@playwright/test';
       test('steps with return values', async ({ page }) => {
-        const v1 = await test.step('my step', (...args) => {
-          expect(args.length).toBe(0);
+        const v1 = await test.step('my step', () => {
           return 10;
         });
         console.log('v1 = ' + v1);
-        const v2 = await test.step('my step', async (...args) => {
-          expect(args.length).toBe(0);
+        const v2 = await test.step('my step', async () => {
           return new Promise(f => setTimeout(() => f(v1 + 10), 100));
         });
         console.log('v2 = ' + v2);
@@ -399,7 +399,7 @@ test('step timeout option', async ({ runInlineTest }) => {
   }, { reporter: '', workers: 1 });
   expect(result.exitCode).toBe(1);
   expect(result.failed).toBe(1);
-  expect(result.output).toContain('Error: Step timeout 100ms exceeded.');
+  expect(result.output).toContain('Error: Step timeout of 100ms exceeded.');
 });
 
 test('step timeout longer than test timeout', async ({ runInlineTest }) => {
@@ -420,6 +420,27 @@ test('step timeout longer than test timeout', async ({ runInlineTest }) => {
   expect(result.exitCode).toBe(1);
   expect(result.failed).toBe(1);
   expect(result.output).toContain('Test timeout of 900ms exceeded.');
+});
+
+test('step timeout includes interrupted action errors', async ({ runInlineTest }) => {
+  const result = await runInlineTest({
+    'a.test.ts': `
+      import { test, expect } from '@playwright/test';
+      test('step with timeout', async ({ page }) => {
+        await test.step('my step', async () => {
+          await page.waitForTimeout(100_000);
+        }, { timeout: 1000 });
+      });
+    `
+  }, { reporter: '', workers: 1 });
+  expect(result.exitCode).toBe(1);
+  expect(result.failed).toBe(1);
+  // Should include 2 errors, one for the step timeout and one for the aborted action.
+  expect.soft(result.output).toContain('TimeoutError: Step timeout of 1000ms exceeded.');
+  expect.soft(result.output).toContain(`> 4 |         await test.step('my step', async () => {`);
+  expect.soft(result.output).toContain('Error: page.waitForTimeout: Test ended.');
+  expect.soft(result.output.split('Error: page.waitForTimeout: Test ended.').length).toBe(2);
+  expect.soft(result.output).toContain('> 5 |           await page.waitForTimeout(100_000);');
 });
 
 test('step timeout is errors.TimeoutError', async ({ runInlineTest }) => {
@@ -616,7 +637,7 @@ test('should not propagate errors from within toPass', async ({ runInlineTest })
   expect(result.exitCode).toBe(0);
   expect(result.output).toBe(`
 hook      |Before Hooks
-expect    |expect.toPass @ a.test.ts:7
+step      |expect.toPass @ a.test.ts:7
 expect    |  expect.toBe @ a.test.ts:6
 expect    |  ↪ error: Error: expect(received).toBe(expected) // Object.is equality
 expect    |  expect.toBe @ a.test.ts:6
@@ -643,8 +664,8 @@ test('should show final toPass error', async ({ runInlineTest }) => {
   expect(result.exitCode).toBe(1);
   expect(stripAnsi(result.output)).toBe(`
 hook      |Before Hooks
-expect    |expect.toPass @ a.test.ts:6
-expect    |↪ error: Error: expect(received).toBe(expected) // Object.is equality
+step      |expect.toPass @ a.test.ts:6
+step      |↪ error: Error: expect(received).toBe(expected) // Object.is equality
 expect    |  expect.toBe @ a.test.ts:5
 expect    |  ↪ error: Error: expect(received).toBe(expected) // Object.is equality
 hook      |After Hooks
@@ -909,7 +930,7 @@ test('step inside expect.toPass', async ({ runInlineTest }) => {
   expect(stripAnsi(result.output)).toBe(`
 hook      |Before Hooks
 test.step |step 1 @ a.test.ts:4
-expect    |  expect.toPass @ a.test.ts:11
+step      |  expect.toPass @ a.test.ts:11
 test.step |    step 2, attempt: 0 @ a.test.ts:7
 test.step |    ↪ error: Error: expect(received).toBe(expected) // Object.is equality
 expect    |      expect.toBe @ a.test.ts:9
@@ -956,7 +977,7 @@ fixture   |  fixture: context
 pw:api    |    browser.newContext
 fixture   |  fixture: page
 pw:api    |    browserContext.newPage
-expect    |expect.toPass @ a.test.ts:11
+step      |expect.toPass @ a.test.ts:11
 pw:api    |  page.goto(about:blank) @ a.test.ts:6
 test.step |  inner step attempt: 0 @ a.test.ts:7
 test.step |  ↪ error: Error: expect(received).toBe(expected) // Object.is equality
@@ -1007,7 +1028,7 @@ fixture   |  fixture: context
 pw:api    |    browser.newContext
 fixture   |  fixture: page
 pw:api    |    browserContext.newPage
-expect    |expect.poll.toHaveLength @ a.test.ts:14
+step      |expect.poll.toHaveLength @ a.test.ts:14
 pw:api    |  page.goto(about:blank) @ a.test.ts:7
 test.step |  inner step attempt: 0 @ a.test.ts:8
 expect    |    expect.toBe @ a.test.ts:10
@@ -1059,7 +1080,7 @@ pw:api    |    browser.newContext
 fixture   |  fixture: page
 pw:api    |    browserContext.newPage
 pw:api    |page.setContent @ a.test.ts:4
-expect    |expect.poll.toBe @ a.test.ts:13
+step      |expect.poll.toBe @ a.test.ts:13
 expect    |  expect.toHaveText @ a.test.ts:7
 test.step |  iteration 1 @ a.test.ts:9
 expect    |    expect.toBeVisible @ a.test.ts:10
@@ -1376,8 +1397,9 @@ test('calls from waitForEvent callback should be under its parent step', {
         await page.setContent('<div onclick="fetch(\\'/simple.json\\').then(r => r.text());">Go!</div>');
         const responseJson = await test.step('custom step', async () => {
           const responsePromise = page.waitForResponse(async response => {
-            const text = await response.text();
-            expect(text).toBeTruthy();
+            await page.content();
+            await page.content();  // second time a charm!
+            await expect(page.locator('div')).toContainText('Go');
             return true;
           });
 
@@ -1405,9 +1427,11 @@ pw:api    |page.goto(${server.EMPTY_PAGE}) @ a.test.ts:4
 pw:api    |page.setContent @ a.test.ts:5
 test.step |custom step @ a.test.ts:6
 pw:api    |  page.waitForResponse @ a.test.ts:7
-pw:api    |  page.click(div) @ a.test.ts:13
-expect    |  expect.toBeTruthy @ a.test.ts:9
-expect    |expect.toBe @ a.test.ts:17
+pw:api    |  page.click(div) @ a.test.ts:14
+pw:api    |  page.content @ a.test.ts:8
+pw:api    |  page.content @ a.test.ts:9
+expect    |  expect.toContainText @ a.test.ts:10
+expect    |expect.toBe @ a.test.ts:18
 hook      |After Hooks
 fixture   |  fixture: page
 fixture   |  fixture: context
@@ -1464,7 +1488,8 @@ test('calls from page.route callback should be under its parent step', {
             const response = await route.fetch();
             const text = await response.text();
             expect(text).toBe('');
-            await route.fulfill({ response })
+            await response.text();  // second time a charm!
+            await route.fulfill({ response });
           });
           await page.goto('${server.EMPTY_PAGE}');
         });
@@ -1485,8 +1510,7 @@ fixture   |  fixture: page
 pw:api    |    browserContext.newPage
 test.step |custom step @ a.test.ts:4
 pw:api    |  page.route @ a.test.ts:5
-pw:api    |  page.goto(${server.EMPTY_PAGE}) @ a.test.ts:11
-pw:api    |  apiResponse.text @ a.test.ts:7
+pw:api    |  page.goto(${server.EMPTY_PAGE}) @ a.test.ts:12
 expect    |  expect.toBe @ a.test.ts:8
 hook      |After Hooks
 fixture   |  fixture: page
@@ -1494,28 +1518,25 @@ fixture   |  fixture: context
 `);
 });
 
-test('test.step.fail and test.step.fixme should work', async ({ runInlineTest }) => {
+test('test.step.skip should work', async ({ runInlineTest }) => {
   const result = await runInlineTest({
     'reporter.ts': stepIndentReporter,
     'playwright.config.ts': `module.exports = { reporter: './reporter' };`,
     'a.test.ts': `
       import { test, expect } from '@playwright/test';
       test('test', async ({ }) => {
-        await test.step('outer step 1', async () => {
-          await test.step.fail('inner step 1.1', async () => {
+        await test.step.skip('outer step 1', async () => {
+          await test.step('inner step 1.1', async () => {
             throw new Error('inner step 1.1 failed');
           });
-          await test.step.fixme('inner step 1.2', async () => {});
+          await test.step.skip('inner step 1.2', async () => {});
           await test.step('inner step 1.3', async () => {});
         });
         await test.step('outer step 2', async () => {
-          await test.step.fixme('inner step 2.1', async () => {});
+          await test.step.skip('inner step 2.1', async () => {});
           await test.step('inner step 2.2', async () => {
             expect(1).toBe(1);
           });
-        });
-        await test.step.fail('outer step 3', async () => {
-          throw new Error('outer step 3 failed');
         });
       });
       `
@@ -1526,48 +1547,16 @@ test('test.step.fail and test.step.fixme should work', async ({ runInlineTest })
   expect(result.report.stats.unexpected).toBe(0);
   expect(stripAnsi(result.output)).toBe(`
 hook      |Before Hooks
-test.step |outer step 1 @ a.test.ts:4
-test.step |  inner step 1.1 @ a.test.ts:5
-test.step |  ↪ error: Error: inner step 1.1 failed
-test.step |  inner step 1.3 @ a.test.ts:9
+test.step |outer step 1 @ a.test.ts:4 (skipped)
 test.step |outer step 2 @ a.test.ts:11
+test.step |  inner step 2.1 @ a.test.ts:12 (skipped)
 test.step |  inner step 2.2 @ a.test.ts:13
 expect    |    expect.toBe @ a.test.ts:14
-test.step |outer step 3 @ a.test.ts:17
-test.step |↪ error: Error: outer step 3 failed
 hook      |After Hooks
 `);
 });
 
-test('timeout inside test.step.fail is an error', async ({ runInlineTest }) => {
-  const result = await runInlineTest({
-    'reporter.ts': stepIndentReporter,
-    'playwright.config.ts': `module.exports = { reporter: './reporter' };`,
-    'a.test.ts': `
-      import { test, expect } from '@playwright/test';
-      test('test 2', async ({ }) => {
-        await test.step('outer step 2', async () => {
-          await test.step.fail('inner step 2', async () => {
-            await new Promise(() => {});
-          });
-        });
-      });
-      `
-  }, { reporter: '', timeout: 2500 });
-
-  expect(result.exitCode).toBe(1);
-  expect(result.report.stats.unexpected).toBe(1);
-  expect(stripAnsi(result.output)).toBe(`
-hook      |Before Hooks
-test.step |outer step 2 @ a.test.ts:4
-test.step |  inner step 2 @ a.test.ts:5
-hook      |After Hooks
-hook      |Worker Cleanup
-          |Test timeout of 2500ms exceeded.
-`);
-});
-
-test('skip test.step.fixme body', async ({ runInlineTest }) => {
+test('skip test.step.skip body', async ({ runInlineTest }) => {
   const result = await runInlineTest({
     'reporter.ts': stepIndentReporter,
     'playwright.config.ts': `module.exports = { reporter: './reporter' };`,
@@ -1576,7 +1565,7 @@ test('skip test.step.fixme body', async ({ runInlineTest }) => {
       test('test', async ({ }) => {
         let didRun = false;
         await test.step('outer step 2', async () => {
-          await test.step.fixme('inner step 2', async () => {
+          await test.step.skip('inner step 2', async () => {
             didRun = true;
           });
         });
@@ -1590,7 +1579,115 @@ test('skip test.step.fixme body', async ({ runInlineTest }) => {
   expect(stripAnsi(result.output)).toBe(`
 hook      |Before Hooks
 test.step |outer step 2 @ a.test.ts:5
+test.step |  inner step 2 @ a.test.ts:6 (skipped)
 expect    |expect.toBe @ a.test.ts:10
 hook      |After Hooks
+`);
+});
+
+test('step.skip should work at runtime', async ({ runInlineTest }) => {
+  const result = await runInlineTest({
+    'reporter.ts': stepIndentReporter,
+    'playwright.config.ts': `module.exports = { reporter: './reporter' };`,
+    'a.test.ts': `
+      import { test, expect } from '@playwright/test';
+      test('test', async ({ }) => {
+        await test.step('outer step 1', async () => {
+          await test.step('inner step 1.1', async (step) => {
+            step.skip();
+          });
+          await test.step('inner step 1.2', async (step) => {
+            step.skip(true, 'condition is true');
+          });
+          await test.step('inner step 1.3', async () => {});
+        });
+        await test.step('outer step 2', async () => {
+          await test.step.skip('inner step 2.1', async () => {});
+          await test.step('inner step 2.2', async () => {
+            expect(1).toBe(1);
+          });
+        });
+      });
+      `
+  }, { reporter: '' });
+
+  expect(result.exitCode).toBe(0);
+  expect(result.report.stats.expected).toBe(1);
+  expect(result.report.stats.unexpected).toBe(0);
+  expect(stripAnsi(result.output)).toBe(`
+hook      |Before Hooks
+test.step |outer step 1 @ a.test.ts:4
+test.step |  inner step 1.1 @ a.test.ts:5 (skipped)
+test.step |  inner step 1.2 @ a.test.ts:8 (skipped: condition is true)
+test.step |  inner step 1.3 @ a.test.ts:11
+test.step |outer step 2 @ a.test.ts:13
+test.step |  inner step 2.1 @ a.test.ts:14 (skipped)
+test.step |  inner step 2.2 @ a.test.ts:15
+expect    |    expect.toBe @ a.test.ts:16
+hook      |After Hooks
+`);
+});
+
+
+test('show api calls inside expects', async ({ runInlineTest }) => {
+  const result = await runInlineTest({
+    'reporter.ts': stepIndentReporter,
+    'playwright.config.ts': `module.exports = { reporter: './reporter' };`,
+    'a.test.ts': `
+      import { test, expect as baseExpect } from '@playwright/test';
+
+      const expect = baseExpect.extend({
+        async toBeInvisible(locator: Locator) {
+          try {
+            await expect.poll(() => locator.isVisible()).toBe(false);
+            return { name: 'toBeInvisible', pass: true, message: '' };
+          } catch (e) {
+            return { name: 'toBeInvisible', pass: false, message: () => 'Expected to be invisible, got visible!' };
+          }
+        },
+      });
+
+      test('test', async ({ page }) => {
+        await page.setContent('<div>hello</div>');
+        const promise = expect(page.locator('div')).toBeInvisible();
+        await page.waitForTimeout(1100);
+        await page.setContent('<div style="display:none">hello</div>');
+        await promise;
+      });
+      `
+  }, { reporter: '' });
+
+  expect(result.exitCode).toBe(0);
+  expect(result.report.stats.expected).toBe(1);
+  expect(stripAnsi(result.output)).toBe(`
+hook      |Before Hooks
+fixture   |  fixture: browser
+pw:api    |    browserType.launch
+fixture   |  fixture: context
+pw:api    |    browser.newContext
+fixture   |  fixture: page
+pw:api    |    browserContext.newPage
+pw:api    |page.setContent @ a.test.ts:16
+expect    |expect.toBeInvisible @ a.test.ts:17
+step      |  expect.poll.toBe @ a.test.ts:7
+pw:api    |    locator.isVisible(div) @ a.test.ts:7
+expect    |    expect.toBe @ a.test.ts:7
+expect    |    ↪ error: Error: expect(received).toBe(expected) // Object.is equality
+pw:api    |    locator.isVisible(div) @ a.test.ts:7
+expect    |    expect.toBe @ a.test.ts:7
+expect    |    ↪ error: Error: expect(received).toBe(expected) // Object.is equality
+pw:api    |    locator.isVisible(div) @ a.test.ts:7
+expect    |    expect.toBe @ a.test.ts:7
+expect    |    ↪ error: Error: expect(received).toBe(expected) // Object.is equality
+pw:api    |    locator.isVisible(div) @ a.test.ts:7
+expect    |    expect.toBe @ a.test.ts:7
+expect    |    ↪ error: Error: expect(received).toBe(expected) // Object.is equality
+pw:api    |    locator.isVisible(div) @ a.test.ts:7
+expect    |    expect.toBe @ a.test.ts:7
+pw:api    |page.waitForTimeout @ a.test.ts:18
+pw:api    |page.setContent @ a.test.ts:19
+hook      |After Hooks
+fixture   |  fixture: page
+fixture   |  fixture: context
 `);
 });

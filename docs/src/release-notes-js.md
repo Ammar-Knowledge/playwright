@@ -6,6 +6,156 @@ toc_max_heading_level: 2
 
 import LiteYouTube from '@site/src/components/LiteYouTube';
 
+## Version 1.51
+
+### Highlights
+
+* New option [`option: BrowserContext.storageState.indexedDB`] for [`method: BrowserContext.storageState`] allows to save and restore IndexedDB contents. Useful when your application uses [IndexedDB API](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) to store authentication tokens, like Firebase Authentication.
+
+  Here is an example following the [authentication guide](./auth.md#basic-shared-account-in-all-tests):
+
+  ```js title="tests/auth.setup.ts"
+  import { test as setup, expect } from '@playwright/test';
+  import path from 'path';
+
+  const authFile = path.join(__dirname, '../playwright/.auth/user.json');
+
+  setup('authenticate', async ({ page }) => {
+    await page.goto('/');
+    // ... perform authentication steps ...
+
+    // make sure to save indexedDB
+    await page.context().storageState({ path: authFile, indexedDB: true });
+  });
+  ```
+
+* New option [`option: Locator.filter.visible`] for [`method: Locator.filter`] allows matching only visible elements.
+
+  ```js title="example.spec.ts"
+  test('some test', async ({ page }) => {
+    // Ignore invisible todo items.
+    const todoItems = page.getByTestId('todo-item').filter({ visible: true });
+    // Check there are exactly 3 visible ones.
+    await expect(todoItems).toHaveCount(3);
+  });
+  ```
+
+* Set `gitCommit: 'generate'` property in [`property: TestConfig.metadata`] to capture git information that will be shown in a test report.
+
+  ```js title="playwright.config.ts"
+  import { defineConfig } from '@playwright/test';
+
+  export default defineConfig({
+    metadata: { gitCommit: 'generate' },
+  });
+  ```
+
+### Test runner
+
+* A new [TestStepInfo] object is now available in test steps. You can add step attachments or skip the step under some conditions.
+
+  ```js
+  test('some test', async ({ page, isMobile }) => {
+    // Note the new "step" argument:
+    await test.step('here is my step', async step => {
+      step.skip(isMobile, 'not relevant on mobile layouts');
+
+      // ...
+      await step.attach('my attachment', { body: 'some text' });
+      // ...
+    });
+  });
+  ```
+
+* HTML reporter now shows the contents of [`property: TestConfig.metadata`].
+
+### Miscellaneous
+
+* New option `contrast` for methods [`method: Page.emulateMedia`] and [`method: Browser.newContext`] allows to emulate the `prefers-contrast` media feature.
+* New option [`option: APIRequest.newContext.failOnStatusCode`] makes all fetch requests made through the [APIRequestContext] throw on response codes other than 2xx and 3xx.
+* Assertion [`method: PageAssertions.toHaveURL`] now supports a predicate.
+
+### Browser Versions
+
+* Chromium 134.0.6998.35
+* Mozilla Firefox 135.0
+* WebKit 18.4
+
+This version was also tested against the following stable channels:
+
+* Google Chrome 133
+* Microsoft Edge 133
+
+
+## Version 1.50
+
+### Test runner
+
+* New option [`option: Test.step.timeout`] allows specifying a maximum run time for an individual test step. A timed-out step will fail the execution of the test.
+
+  ```js
+  test('some test', async ({ page }) => {
+    await test.step('a step', async () => {
+      // This step can time out separately from the test
+    }, { timeout: 1000 });
+  });
+  ```
+
+* New method [`method: Test.step.skip`] to disable execution of a test step.
+
+  ```js
+  test('some test', async ({ page }) => {
+    await test.step('before running step', async () => {
+      // Normal step
+    });
+
+    await test.step.skip('not yet ready', async () => {
+      // This step is skipped
+    });
+
+    await test.step('after running step', async () => {
+      // This step still runs even though the previous one was skipped
+    });
+  });
+  ```
+
+* Expanded [`method: LocatorAssertions.toMatchAriaSnapshot#2`] to allow storing of aria snapshots in separate YAML files.
+* Added method [`method: LocatorAssertions.toHaveAccessibleErrorMessage`] to assert the Locator points to an element with a given [aria errormessage](https://w3c.github.io/aria/#aria-errormessage).
+* Option [`property: TestConfig.updateSnapshots`] added the configuration enum `changed`. `changed` updates only the snapshots that have changed, whereas `all` now updates all snapshots, regardless of whether there are any differences.
+* New option [`property: TestConfig.updateSourceMethod`] defines the way source code is updated when [`property: TestConfig.updateSnapshots`] is configured. Added `overwrite` and `3-way` modes that write the changes into source code, on top of existing `patch` mode that creates a patch file.
+
+  ```bash
+  npx playwright test --update-snapshots=changed --update-source-method=3way
+  ```
+
+* Option [`property: TestConfig.webServer`] added a `gracefulShutdown` field for specifying a process kill signal other than the default `SIGKILL`.
+* Exposed [`property: TestStep.attachments`] from the reporter API to allow retrieval of all attachments created by that step.
+* New option `pathTemplate` for `toHaveScreenshot` and `toMatchAriaSnapshot` assertions in the [`property: TestConfig.expect`] configuration.
+
+### UI updates
+
+* Updated default HTML reporter to improve display of attachments.
+* New button in Codegen for picking elements to produce aria snapshots.
+* Additional details (such as keys pressed) are now displayed alongside action API calls in traces.
+* Display of `canvas` content in traces is error-prone. Display is now disabled by default, and can be enabled via the `Display canvas content` UI setting.
+* `Call` and `Network` panels now display additional time information.
+
+### Breaking
+
+* [`method: LocatorAssertions.toBeEditable`] and [`method: Locator.isEditable`] now throw if the target element is not `<input>`, `<select>`, or a number of other editable elements.
+* Option [`property: TestConfig.updateSnapshots`] now updates all snapshots when set to `all`, rather than only the failed/changed snapshots. Use the new enum `changed` to keep the old functionality of only updating the changed snapshots.
+
+### Browser Versions
+
+* Chromium 133.0.6943.16
+* Mozilla Firefox 134.0
+* WebKit 18.2
+
+This version was also tested against the following stable channels:
+
+* Google Chrome 132
+* Microsoft Edge 132
+
 ## Version 1.49
 
 <LiteYouTube
@@ -15,7 +165,7 @@ import LiteYouTube from '@site/src/components/LiteYouTube';
 
 ### Aria snapshots
 
-New assertion [`method: LocatorAssertions.toMatchAriaSnapshot#2`] verifies page structure by comparing to an expected accessibility tree, represented as YAML.
+New assertion [`method: LocatorAssertions.toMatchAriaSnapshot`] verifies page structure by comparing to an expected accessibility tree, represented as YAML.
 
 ```js
 await page.goto('https://playwright.dev');
@@ -1429,9 +1579,9 @@ This version was also tested against the following stable channels:
 
   ```html
   <select multiple>
-    <option value="red">Red</div>
-    <option value="green">Green</div>
-    <option value="blue">Blue</div>
+    <option value="red">Red</option>
+    <option value="green">Green</option>
+    <option value="blue">Blue</option>
   </select>
   ```
 
